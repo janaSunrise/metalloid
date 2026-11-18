@@ -1,0 +1,25 @@
+[project]
+name = "metalloid"
+version = "0.1.0"
+description = "Write and dispatch Metal compute kernels on Apple silicon GPUs from Python."
+readme = "README.md"
+authors = [
+    { name = "Sunrit Jana", email = "warriordefenderz@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+keywords = ["metal", "gpu", "apple-silicon", "compute", "kernels"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14.0"]
+build-backend = "uv_build"

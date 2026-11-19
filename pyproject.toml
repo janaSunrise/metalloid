@@ -58,7 +58,7 @@ docstring-code-format = true
 
 [tool.mypy]
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.pytest]
 testpaths = ["tests"]

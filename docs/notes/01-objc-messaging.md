@@ -11,7 +11,7 @@ Sources:
 [device newBufferWithLength:1024 options:0]
 ```
 
-- **Receiver**: `device`, the object getting the message.
+- **Receiver**: `device`, the object/class getting the message.
 - **Selector**: `newBufferWithLength:options:`, the method name. One colon per argument.
 - **Arguments**: `1024` and `0`.
 
@@ -84,4 +84,4 @@ included.
 
 ## Open questions
 
-- What does `NS_RETURNS_RETAINED` oblige us to do?
+- What does `NS_RETURNS_RETAINED` oblige us to do? Release the result, see note 03.

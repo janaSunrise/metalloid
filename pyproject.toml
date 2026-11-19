@@ -32,6 +32,9 @@ dev = [
     "ruff>=0.17.5",
 ]
 
+[tool.ruff]
+extend-exclude = ["docs"]  # hand-written notes, including their code blocks
+
 [tool.ruff.lint]
 select = [
     "E", "W",  # pycodestyle

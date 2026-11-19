@@ -1,11 +1,15 @@
-import ctypes
 from ctypes import c_char_p, c_ulong, c_void_p
 
 import pytest
 
-from metalloid._objc import get_class, selector, send
-
-ctypes.CDLL("/System/Library/Frameworks/Foundation.framework/Foundation")
+from metalloid._objc import (
+    autorelease_pool,
+    get_class,
+    release,
+    retain,
+    selector,
+    send,
+)
 
 
 def make_string(text: str) -> int:
@@ -17,6 +21,16 @@ def make_string(text: str) -> int:
         argtypes=(c_char_p,),
     )
     return string
+
+
+def make_object() -> int:
+    obj: int = send(get_class("NSObject"), "new", restype=c_void_p)
+    return obj
+
+
+def retain_count(obj: int) -> int:
+    count: int = send(obj, "retainCount", restype=c_ulong)
+    return count
 
 
 def test_get_class_returns_full_pointer() -> None:
@@ -45,3 +59,40 @@ def test_send_round_trips_string() -> None:
 def test_send_rejects_wrong_argument_count() -> None:
     with pytest.raises(TypeError):
         send(make_string("x"), "length", 1, restype=c_ulong)
+
+
+def test_new_object_is_owned() -> None:
+    obj = make_object()
+    assert retain_count(obj) == 1
+    release(obj)
+
+
+def test_retain_and_release_balance() -> None:
+    obj = make_object()
+    assert retain(obj) == obj
+    assert retain_count(obj) == 2
+    release(obj)
+    assert retain_count(obj) == 1
+    release(obj)
+
+
+def test_pool_releases_autoreleased_objects() -> None:
+    obj = make_object()
+    with autorelease_pool():
+        send(retain(obj), "autorelease", restype=c_void_p)
+        assert retain_count(obj) == 2
+    assert retain_count(obj) == 1
+    release(obj)
+
+
+def test_pool_drains_on_exception() -> None:
+    def autorelease_then_fail(obj: int) -> None:
+        with autorelease_pool():
+            send(retain(obj), "autorelease", restype=c_void_p)
+            raise RuntimeError
+
+    obj = make_object()
+    with pytest.raises(RuntimeError):
+        autorelease_then_fail(obj)
+    assert retain_count(obj) == 1
+    release(obj)

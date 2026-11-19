@@ -117,4 +117,5 @@ the characters are stored in the pointer itself. Messaging works the same.
 
 ## Open questions
 
-- Who frees the string `stringWithUTF8String:` returned?
+- Who frees the string `stringWithUTF8String:` returned? The autorelease pool,
+  see note 03.

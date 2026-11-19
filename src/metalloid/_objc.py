@@ -1,7 +1,8 @@
 """Bridge to the Objective-C runtime through ctypes."""
 
 import ctypes
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from ctypes import CFUNCTYPE, c_char_p, c_void_p
 from functools import cache
 from typing import TYPE_CHECKING, Any
@@ -21,6 +22,9 @@ _libobjc.objc_getClass.restype = c_void_p
 
 _libobjc.sel_registerName.argtypes = [c_char_p]
 _libobjc.sel_registerName.restype = c_void_p
+
+# Defines NSAutoreleasePool
+ctypes.CDLL("/System/Library/Frameworks/Foundation.framework/Foundation")
 
 _senders: dict[Signature, Callable[..., Any]] = {}
 """``objc_msgSend`` cast to each signature seen so far."""
@@ -81,3 +85,27 @@ def send(
             f"got {len(args)} args and {len(argtypes)} argtypes"
         )
     return _msg_send(restype, argtypes)(receiver, selector(name), *args)
+
+
+def retain(obj: int) -> int:
+    """Take ownership of ``obj`` and return it."""
+    result: int = send(obj, "retain", restype=c_void_p)
+    return result
+
+
+def release(obj: int) -> None:
+    """Give up ownership of ``obj``, freeing it if no one else owns it."""
+    send(obj, "release", restype=None)
+
+
+@contextmanager
+def autorelease_pool() -> Generator[None]:
+    """Release the objects autoreleased inside the block when it exits.
+
+    Without a pool, autoreleased objects are never released.
+    """
+    pool = send(get_class("NSAutoreleasePool"), "new", restype=c_void_p)
+    try:
+        yield
+    finally:
+        send(pool, "drain", restype=None)

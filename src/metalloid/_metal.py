@@ -105,7 +105,16 @@ class Buffer:
         self.nbytes = nbytes
 
     def __buffer__(self, flags: int, /) -> memoryview:
-        """Expose the buffer's memory to the buffer protocol."""
+        """Expose the buffer's memory to the buffer protocol.
+
+        ``c_ubyte * nbytes`` is the C type ``unsigned char[nbytes]``.
+        ``from_address`` lays it over the buffer's memory without allocating
+        or copying, and ``memoryview`` wraps that for the protocol.
+
+        The bytes carry no type; `numpy` gives them one. The view's format is
+        ``"<B"``, which ``memoryview`` can't assign items through, so read and
+        write through `numpy`.
+        """
         return memoryview((c_ubyte * self.nbytes).from_address(self._contents))
 
     def numpy(

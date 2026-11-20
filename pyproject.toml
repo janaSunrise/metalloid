@@ -7,7 +7,9 @@ authors = [
     { name = "Sunrit Jana", email = "warriordefenderz@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "numpy>=2.5.5",
+]
 keywords = ["metal", "gpu", "apple-silicon", "compute", "kernels"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",

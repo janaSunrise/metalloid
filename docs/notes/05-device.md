@@ -137,4 +137,4 @@ device.max_threads_per_threadgroup         # (1024, 1024, 1024)
 ## Open questions
 
 - `maxBufferLength` is 8.9 GiB, smaller than the 11.8 GiB working set. What
-  limits a single buffer?
+  limits a single buffer? Partly answered in note 06.

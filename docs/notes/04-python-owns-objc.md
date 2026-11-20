@@ -76,7 +76,7 @@ deletes it, so it must hold one. `owned` says where it comes from:
 ptr = send(NSObject, "new", restype=c_void_p)  # new gives you a ticket
 obj = Object(ptr, owned=True)                  # you hand it to obj
 
-ptr = make_string("hello")                     # the pool holds the only ticket
+ptr = from_str("hello")                        # the pool holds the only ticket
 obj = Object(ptr)                              # obj retains: its own ticket
 ```
 
@@ -86,7 +86,7 @@ the default retains: a wrong `owned=True` crashes later, a wrong default only
 leaks.
 
 ```py
-string = Object(make_string("metalloid"))
+string = Object(from_str("metalloid"))
 string.send("length", restype=c_ulong)     # 9
 del string                                 # release runs here
 ```

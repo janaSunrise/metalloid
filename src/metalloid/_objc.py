@@ -99,6 +99,21 @@ def release(obj: int) -> None:
     send(obj, "release", restype=None)
 
 
+def from_str(text: str) -> int:
+    """Return a new ``NSString`` holding ``text``.
+
+    The string is autoreleased: use it inside `autorelease_pool`.
+    """
+    string: int = send(
+        get_class("NSString"),
+        "stringWithUTF8String:",
+        text.encode(),
+        restype=c_void_p,
+        argtypes=(c_char_p,),
+    )
+    return string
+
+
 def to_str(string: int) -> str:
     """Return the text of the ``NSString`` at ``string``."""
     text: bytes = send(string, "UTF8String", restype=c_char_p)

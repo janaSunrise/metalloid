@@ -47,4 +47,5 @@ A kernel is not called like a function.
 
 ## Open questions
 
-- What is pipeline and buffer in this context?
+- What is pipeline and buffer in this context? Buffers in note 06,
+  pipelines in note 07.

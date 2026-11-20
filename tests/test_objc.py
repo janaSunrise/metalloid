@@ -5,6 +5,7 @@ import pytest
 from metalloid._objc import (
     Object,
     autorelease_pool,
+    from_str,
     get_class,
     release,
     retain,
@@ -60,6 +61,11 @@ def test_send_round_trips_string() -> None:
 
 def test_to_str_decodes_utf8() -> None:
     assert to_str(make_string("héllo")) == "héllo"
+
+
+def test_from_str_round_trips() -> None:
+    with autorelease_pool():
+        assert to_str(from_str("héllo")) == "héllo"
 
 
 def test_send_rejects_wrong_argument_count() -> None:

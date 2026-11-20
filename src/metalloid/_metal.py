@@ -1,11 +1,11 @@
 import ctypes
-from ctypes import Structure, c_bool, c_ubyte, c_uint64, c_ulong, c_void_p
+from ctypes import Structure, byref, c_bool, c_ubyte, c_uint64, c_ulong, c_void_p
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
-from metalloid._objc import Object, autorelease_pool, to_str
+from metalloid._objc import Object, autorelease_pool, from_str, send, to_str
 
 _metal = ctypes.CDLL("/System/Library/Frameworks/Metal.framework/Metal")
 
@@ -17,6 +17,17 @@ _metal.MTLCreateSystemDefaultDevice.restype = c_void_p
 
 # MTLStorageModeShared << MTLResourceStorageModeShift: memory the CPU and GPU share.
 _MTL_RESOURCE_STORAGE_MODE_SHARED = 0
+
+
+class CompileError(Exception):
+    """Metal could not compile a kernel. The message is the compiler's."""
+
+
+def _describe(error: c_void_p) -> str:
+    """Return the message of the ``NSError`` an out-parameter received."""
+    if error.value is None:
+        return "Metal reported no error description"
+    return to_str(send(error.value, "localizedDescription", restype=c_void_p))
 
 
 class _MTLSize(Structure):
@@ -90,6 +101,27 @@ class Device:
 
         return Buffer(Object(ptr, owned=True), nbytes)
 
+    def compile(self, source: str) -> "Library":
+        """Compile Metal Shading Language ``source`` into a library.
+
+        Raises:
+            CompileError: If the source doesn't compile.
+        """
+        with autorelease_pool():
+            error = c_void_p()
+            ptr: int | None = self._obj.send(
+                "newLibraryWithSource:options:error:",
+                from_str(source),
+                None,
+                byref(error),
+                restype=c_void_p,
+                argtypes=(c_void_p, c_void_p, c_void_p),
+            )
+            if ptr is None:
+                raise CompileError(_describe(error))
+
+        return Library(self, Object(ptr, owned=True))
+
 
 class Buffer:
     """GPU memory the CPU reads and writes through NumPy, without copying.
@@ -130,3 +162,63 @@ class Buffer:
             shape: The array's shape. Defaults to one dimension.
         """
         return np.frombuffer(self, dtype=dtype).reshape(shape)
+
+
+class Library:
+    """Compiled kernels, from `Device.compile`."""
+
+    def __init__(self, device: Device, obj: Object) -> None:
+        """Wrap the ``MTLLibrary`` in ``obj``, compiled for ``device``."""
+        self._device = device
+        self._obj = obj
+
+    def kernel(self, name: str) -> "Kernel":
+        """Return the kernel function ``name``, ready to run.
+
+        Raises:
+            LookupError: If the library has no kernel called ``name``.
+            CompileError: If Metal can't build a pipeline for it.
+        """
+        with autorelease_pool():
+            ptr: int | None = self._obj.send(
+                "newFunctionWithName:",
+                from_str(name),
+                restype=c_void_p,
+                argtypes=(c_void_p,),
+            )
+            if ptr is None:
+                raise LookupError(f"no kernel named {name!r} in the library")
+            function = Object(ptr, owned=True)
+
+            error = c_void_p()
+            ptr = self._device._obj.send(
+                "newComputePipelineStateWithFunction:error:",
+                function.ptr,
+                byref(error),
+                restype=c_void_p,
+                argtypes=(c_void_p, c_void_p),
+            )
+            if ptr is None:
+                raise CompileError(_describe(error))
+
+        return Kernel(Object(ptr, owned=True))
+
+
+class Kernel:
+    """A kernel function compiled into a pipeline the GPU can run."""
+
+    def __init__(self, obj: Object) -> None:
+        """Wrap the ``MTLComputePipelineState`` in ``obj``."""
+        self._obj = obj
+
+    @property
+    def max_total_threads_per_threadgroup(self) -> int:
+        """The most threads one threadgroup can have for this kernel."""
+        count: int = self._obj.send("maxTotalThreadsPerThreadgroup", restype=c_ulong)
+        return count
+
+    @property
+    def thread_execution_width(self) -> int:
+        """Threads the GPU runs in lock-step; size threadgroups in multiples."""
+        width: int = self._obj.send("threadExecutionWidth", restype=c_ulong)
+        return width

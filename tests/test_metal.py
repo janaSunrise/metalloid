@@ -4,7 +4,16 @@ from ctypes import c_float, c_void_p
 import numpy as np
 import pytest
 
-from metalloid._metal import Device
+from metalloid._metal import CompileError, Device
+
+ADD = """
+kernel void add(const device float *a [[buffer(0)]],
+                const device float *b [[buffer(1)]],
+                device float *out [[buffer(2)]],
+                uint i [[thread_position_in_grid]]) {
+    out[i] = a[i] + b[i];
+}
+"""
 
 
 def test_device_name() -> None:
@@ -59,3 +68,19 @@ def test_new_buffer_rejects_more_than_max() -> None:
     device = Device()
     with pytest.raises(MemoryError):
         device.new_buffer(device.max_buffer_length + 1)
+
+
+def test_kernel_reports_thread_limits() -> None:
+    kernel = Device().compile(ADD).kernel("add")
+    assert kernel.thread_execution_width > 0
+    assert kernel.max_total_threads_per_threadgroup >= kernel.thread_execution_width
+
+
+def test_compile_error_carries_compiler_message() -> None:
+    with pytest.raises(CompileError, match="undeclared identifier 'c'"):
+        Device().compile(ADD.replace("b[i]", "c[i]"))
+
+
+def test_missing_kernel_raises() -> None:
+    with pytest.raises(LookupError, match="nope"):
+        Device().compile(ADD).kernel("nope")

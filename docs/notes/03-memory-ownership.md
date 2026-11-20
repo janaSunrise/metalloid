@@ -1,8 +1,8 @@
 # 03 · Who owns an object
 
 Sources:
-- [Memory Management Policy](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmRules.html),
-- [Using Autorelease Pool Blocks](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmAutoreleasePools.html),
+- [Memory Management Policy](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmRules.html)
+- [Using Autorelease Pool Blocks](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/mmAutoreleasePools.html)
 - SDK headers `objc/NSObject.h`, `Foundation/NSAutoreleasePool.h`, `Metal/MTLDevice.h`.
 
 ## Reference counting
@@ -87,7 +87,7 @@ raises:
 
 ```py
 with autorelease_pool():
-    s = make_string("...")      # released when the block exits
+    s = from_str("...")         # released when the block exits
 ```
 
 The class lives in Foundation, not libobjc, so `_objc.py` loads Foundation.

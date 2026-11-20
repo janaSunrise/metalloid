@@ -99,6 +99,12 @@ def release(obj: int) -> None:
     send(obj, "release", restype=None)
 
 
+def to_str(string: int) -> str:
+    """Return the text of the ``NSString`` at ``string``."""
+    text: bytes = send(string, "UTF8String", restype=c_char_p)
+    return text.decode()
+
+
 @contextmanager
 def autorelease_pool() -> Generator[None]:
     """Release the objects autoreleased inside the block when it exits.

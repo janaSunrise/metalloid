@@ -10,6 +10,7 @@ from metalloid._objc import (
     retain,
     selector,
     send,
+    to_str,
 )
 
 
@@ -55,6 +56,10 @@ def test_send_returns_integer() -> None:
 def test_send_round_trips_string() -> None:
     string = make_string("héllo")
     assert send(string, "UTF8String", restype=c_char_p) == "héllo".encode()
+
+
+def test_to_str_decodes_utf8() -> None:
+    assert to_str(make_string("héllo")) == "héllo"
 
 
 def test_send_rejects_wrong_argument_count() -> None:

@@ -120,4 +120,5 @@ A tagged pointer is not allocated, so retain and release do nothing to it.
 ## Open questions
 
 - Python frees its objects by reference counting too. Can a Python object own
-  an Objective-C one, so `release` runs when it is garbage collected?
+  an Objective-C one, so `release` runs when it is garbage collected? Yes,
+  see note 04.

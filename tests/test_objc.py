@@ -3,6 +3,7 @@ from ctypes import c_char_p, c_ulong, c_void_p
 import pytest
 
 from metalloid._objc import (
+    Object,
     autorelease_pool,
     get_class,
     release,
@@ -96,3 +97,26 @@ def test_pool_drains_on_exception() -> None:
         autorelease_then_fail(obj)
     assert retain_count(obj) == 1
     release(obj)
+
+
+def test_object_releases_when_collected() -> None:
+    ptr = make_object()
+    wrapper = Object(ptr)
+    assert retain_count(ptr) == 2
+    del wrapper
+    assert retain_count(ptr) == 1
+    release(ptr)
+
+
+def test_object_adopts_owned_pointer() -> None:
+    ptr = retain(make_object())
+    wrapper = Object(ptr, owned=True)
+    assert retain_count(ptr) == 2
+    del wrapper
+    assert retain_count(ptr) == 1
+    release(ptr)
+
+
+def test_object_sends_messages() -> None:
+    string = Object(make_string("metalloid"))
+    assert string.send("length", restype=c_ulong) == 9

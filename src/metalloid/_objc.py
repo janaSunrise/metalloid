@@ -1,6 +1,7 @@
 """Bridge to the Objective-C runtime through ctypes."""
 
 import ctypes
+import weakref
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from ctypes import CFUNCTYPE, c_char_p, c_void_p
@@ -109,3 +110,35 @@ def autorelease_pool() -> Generator[None]:
         yield
     finally:
         send(pool, "drain", restype=None)
+
+
+class Object:
+    """An Objective-C object kept alive by this Python object.
+
+    The object is released when this wrapper is garbage collected.
+
+    Attributes:
+        ptr: The object's address, or a tagged pointer.
+    """
+
+    def __init__(self, ptr: int, *, owned: bool = False) -> None:
+        """Take ownership of the object at ``ptr``.
+
+        Args:
+            ptr: The object's address, or a tagged pointer.
+            owned: Whether the caller already owns ``ptr``, as with ``new``
+                or ``NS_RETURNS_RETAINED``. That ownership passes to this
+                wrapper. Otherwise the wrapper retains ``ptr``.
+        """
+        self.ptr = ptr if owned else retain(ptr)
+        weakref.finalize(self, release, ptr)
+
+    def send(
+        self,
+        name: str,
+        *args: Any,
+        restype: CType | None,
+        argtypes: tuple[CType, ...] = (),
+    ) -> Any:
+        """Send the message ``name`` to this object. See `send`."""
+        return send(self.ptr, name, *args, restype=restype, argtypes=argtypes)

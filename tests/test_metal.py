@@ -11,6 +11,7 @@ from metalloid._metal import (
     KernelNotFoundError,
     MetalError,
 )
+from metalloid._objc import send
 
 ADD = """
 kernel void add(const device float *a [[buffer(0)]],
@@ -62,7 +63,8 @@ def test_new_buffer_is_zeroed() -> None:
 def test_numpy_writes_reach_metal() -> None:
     buffer = Device().new_buffer(16)
     buffer.numpy(np.float32)[:] = [1.5, 2.5, 3.5, 4.5]
-    contents = buffer._obj.send("contents", restype=c_void_p)
+    contents = send(buffer._obj.ptr, "contents", restype=c_void_p)
+    assert contents is not None
     assert list((c_float * 4).from_address(contents)) == [1.5, 2.5, 3.5, 4.5]
 
 

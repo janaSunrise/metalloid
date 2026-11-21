@@ -1,6 +1,8 @@
 # 02 · Calling C from Python with ctypes
 
-Source: [ctypes](https://docs.python.org/3/library/ctypes.html).
+Sources:
+- [ctypes](https://docs.python.org/3/library/ctypes.html)
+- [`typing.overload`](https://docs.python.org/3/library/typing.html#typing.overload)
 
 ## Loading a library
 
@@ -109,6 +111,51 @@ for the same C function, with its own fixed types.
 | `id`, `Class`, `SEL`  | `c_void_p` | all pointers                     |
 | `const char *`        | `c_char_p` | NUL-terminated bytes             |
 | `NSUInteger`          | `c_ulong`  | 64-bit unsigned on Apple silicon |
+
+## What a call returns
+
+A call never returns a `c_ulong` object. ctypes converts the result to the
+matching Python type, and NULL becomes `None`:
+
+| `restype`              | Python value                 |
+| ---------------------- | ---------------------------- |
+| `c_ulong`, `c_uint64`  | `int`                        |
+| `c_bool`               | `bool`                       |
+| `c_void_p`             | `int`, or `None` for nil     |
+| `c_char_p`             | `bytes`, or `None` for NULL  |
+| a `Structure` subclass | an instance of it            |
+| `None`                 | `None`, for `void`           |
+
+`send` is typed from this table with `@overload`: one function, several
+signatures, and the type checker picks the one that matches `restype`.
+
+```py
+@overload
+def send[T](receiver: int, ..., restype: type[_SimpleCData[T]]) -> T: ...
+@overload
+def send[S: Structure](receiver: int, ..., restype: type[S]) -> S: ...
+@overload
+def send(receiver: int, ..., restype: None) -> None: ...
+```
+
+`_SimpleCData` is the base class of the fundamental types, and its parameter
+is the Python type a call returns: `c_ulong` is a `_SimpleCData[int]`, and
+`c_void_p` a `_SimpleCData[int | None]`. So the result's type comes from
+`restype` alone:
+
+```py
+send(string, "length", restype=c_ulong)      # int
+send(device, "name", restype=c_void_p)       # int | None
+```
+
+The receiver is an `int`, never `None`. Objective-C allows messages to nil:
+they do nothing and return zero, which hides the mistake. The type checker
+rejects them instead, so a `nullable` result must be checked before it's used:
+
+```py
+commands = send(queue, "commandBuffer", restype=c_void_p)    # int | None
+send(commands, "computeCommandEncoder", restype=c_void_p)    # error: may be None
+```
 
 ## Tagged pointers
 

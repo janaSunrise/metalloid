@@ -86,8 +86,8 @@ leaks.
 
 ```py
 string = Object(from_str("metalloid"))
-string.send("length", restype=c_ulong)     # 9
-del string                                 # release runs here
+send(string.ptr, "length", restype=c_ulong)    # 9
+del string                                     # release runs here
 ```
 
 `del` doesn't call the finalizer directly:

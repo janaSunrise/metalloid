@@ -48,6 +48,9 @@ def _describe(error: c_void_p) -> str:
 
 class _MTLSize(Structure):
     _fields_ = (("width", c_ulong), ("height", c_ulong), ("depth", c_ulong))
+    width: int
+    height: int
+    depth: int
 
 
 class Device:
@@ -66,7 +69,7 @@ class Device:
             self._obj = Object(ptr, owned=True)
 
             # One queue for the device's lifetime as per Apple.
-            queue: int | None = self._obj.send("newCommandQueue", restype=c_void_p)
+            queue = send(self._obj.ptr, "newCommandQueue", restype=c_void_p)
             if queue is None:
                 raise MetalError("Metal could not create a command queue")
             self._queue = Object(queue, owned=True)
@@ -74,31 +77,28 @@ class Device:
     @property
     def name(self) -> str:
         """The GPU's full name."""
-        return to_str(self._obj.send("name", restype=c_void_p))
+        return to_str(send(self._obj.ptr, "name", restype=c_void_p))
 
     @property
     def has_unified_memory(self) -> bool:
         """Whether the GPU shares its memory with the CPU."""
-        unified: bool = self._obj.send("hasUnifiedMemory", restype=c_bool)
-        return unified
+        return send(self._obj.ptr, "hasUnifiedMemory", restype=c_bool)
 
     @property
     def recommended_max_working_set_size(self) -> int:
         """Bytes the GPU can use without hurting performance."""
-        size: int = self._obj.send("recommendedMaxWorkingSetSize", restype=c_uint64)
-        return size
+        return send(self._obj.ptr, "recommendedMaxWorkingSetSize", restype=c_uint64)
 
     @property
     def max_threads_per_threadgroup(self) -> tuple[int, int, int]:
         """The largest threadgroup as ``(width, height, depth)``."""
-        size: _MTLSize = self._obj.send("maxThreadsPerThreadgroup", restype=_MTLSize)
+        size = send(self._obj.ptr, "maxThreadsPerThreadgroup", restype=_MTLSize)
         return size.width, size.height, size.depth
 
     @property
     def max_buffer_length(self) -> int:
         """The largest buffer, in bytes, the GPU can allocate."""
-        length: int = self._obj.send("maxBufferLength", restype=c_ulong)
-        return length
+        return send(self._obj.ptr, "maxBufferLength", restype=c_ulong)
 
     def new_buffer(self, nbytes: int) -> "Buffer":
         """Allocate ``nbytes`` of zeroed memory shared by the CPU and GPU.
@@ -108,7 +108,8 @@ class Device:
                 between 1 and `max_buffer_length`.
         """
         with autorelease_pool():
-            ptr: int | None = self._obj.send(
+            ptr = send(
+                self._obj.ptr,
                 "newBufferWithLength:options:",
                 nbytes,
                 _MTL_RESOURCE_STORAGE_MODE_SHARED,
@@ -129,7 +130,8 @@ class Device:
         """
         with autorelease_pool():
             error = c_void_p()
-            ptr: int | None = self._obj.send(
+            ptr = send(
+                self._obj.ptr,
                 "newLibraryWithSource:options:error:",
                 from_str(source),
                 None,
@@ -150,15 +152,20 @@ class Device:
 
         Raises:
             ValueError: If ``threads`` is less than 1.
-            MetalError: If the GPU fails to run the kernel.
+            MetalError: If Metal can't encode the work, or the GPU fails to
+                run it.
         """
         if threads < 1:
             raise ValueError(f"threads must be at least 1, got {threads}")
         group = min(kernel.max_total_threads_per_threadgroup, threads)
 
         with autorelease_pool():
-            commands = self._queue.send("commandBuffer", restype=c_void_p)
+            commands = send(self._queue.ptr, "commandBuffer", restype=c_void_p)
+            if commands is None:
+                raise MetalError("Metal could not create a command buffer")
             encoder = send(commands, "computeCommandEncoder", restype=c_void_p)
+            if encoder is None:
+                raise MetalError("Metal could not create a compute command encoder")
 
             send(
                 encoder,
@@ -206,7 +213,9 @@ class Buffer:
     def __init__(self, obj: Object, nbytes: int) -> None:
         """Wrap the ``MTLBuffer`` in ``obj``. Use `Device.new_buffer`."""
         self._obj = obj
-        self._contents: int = obj.send("contents", restype=c_void_p)
+        contents = send(obj.ptr, "contents", restype=c_void_p)
+        assert contents is not None, "contents is nonnull in MTLBuffer.h"
+        self._contents = contents
         self.nbytes = nbytes
 
     def __buffer__(self, flags: int, /) -> memoryview:
@@ -253,7 +262,8 @@ class Library:
             CompileError: If Metal can't build a pipeline for it.
         """
         with autorelease_pool():
-            ptr: int | None = self._obj.send(
+            ptr = send(
+                self._obj.ptr,
                 "newFunctionWithName:",
                 from_str(name),
                 restype=c_void_p,
@@ -264,7 +274,8 @@ class Library:
             function = Object(ptr, owned=True)
 
             error = c_void_p()
-            ptr = self._device._obj.send(
+            ptr = send(
+                self._device._obj.ptr,
                 "newComputePipelineStateWithFunction:error:",
                 function.ptr,
                 byref(error),
@@ -287,11 +298,9 @@ class Kernel:
     @property
     def max_total_threads_per_threadgroup(self) -> int:
         """The most threads one threadgroup can have for this kernel."""
-        count: int = self._obj.send("maxTotalThreadsPerThreadgroup", restype=c_ulong)
-        return count
+        return send(self._obj.ptr, "maxTotalThreadsPerThreadgroup", restype=c_ulong)
 
     @property
     def thread_execution_width(self) -> int:
         """Threads the GPU runs in lock-step; size threadgroups in multiples."""
-        width: int = self._obj.send("threadExecutionWidth", restype=c_ulong)
-        return width
+        return send(self._obj.ptr, "threadExecutionWidth", restype=c_ulong)

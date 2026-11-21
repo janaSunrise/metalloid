@@ -1,4 +1,4 @@
-from ctypes import c_char_p, c_ulong, c_void_p
+from ctypes import c_char_p, c_ulong, c_ushort, c_void_p
 
 import pytest
 
@@ -15,25 +15,14 @@ from metalloid._objc import (
 )
 
 
-def make_string(text: str) -> int:
-    string: int = send(
-        get_class("NSString"),
-        "stringWithUTF8String:",
-        text.encode(),
-        restype=c_void_p,
-        argtypes=(c_char_p,),
-    )
-    return string
-
-
 def make_object() -> int:
-    obj: int = send(get_class("NSObject"), "new", restype=c_void_p)
+    obj = send(get_class("NSObject"), "new", restype=c_void_p)
+    assert obj is not None
     return obj
 
 
 def retain_count(obj: int) -> int:
-    count: int = send(obj, "retainCount", restype=c_ulong)
-    return count
+    return send(obj, "retainCount", restype=c_ulong)
 
 
 def test_get_class_returns_full_pointer() -> None:
@@ -51,16 +40,14 @@ def test_selectors_are_interned() -> None:
 
 
 def test_send_returns_integer() -> None:
-    assert send(make_string("metalloid"), "length", restype=c_ulong) == 9
+    with autorelease_pool():
+        assert send(from_str("metalloid"), "length", restype=c_ulong) == 9
 
 
 def test_send_round_trips_string() -> None:
-    string = make_string("héllo")
-    assert send(string, "UTF8String", restype=c_char_p) == "héllo".encode()
-
-
-def test_to_str_decodes_utf8() -> None:
-    assert to_str(make_string("héllo")) == "héllo"
+    with autorelease_pool():
+        string = from_str("héllo")
+        assert send(string, "UTF8String", restype=c_char_p) == "héllo".encode()
 
 
 def test_from_str_round_trips() -> None:
@@ -68,9 +55,29 @@ def test_from_str_round_trips() -> None:
         assert to_str(from_str("héllo")) == "héllo"
 
 
+def test_to_str_rejects_nil() -> None:
+    with pytest.raises(ValueError, match="nil"):
+        to_str(None)
+
+
+def test_to_str_rejects_string_without_utf8() -> None:
+    lone_surrogate = (c_ushort * 1)(0xD800)
+    with autorelease_pool():
+        string = send(
+            get_class("NSString"),
+            "stringWithCharacters:length:",
+            lone_surrogate,
+            1,
+            restype=c_void_p,
+            argtypes=(c_void_p, c_ulong),
+        )
+        with pytest.raises(ValueError, match="UTF-8"):
+            to_str(string)
+
+
 def test_send_rejects_wrong_argument_count() -> None:
     with pytest.raises(TypeError):
-        send(make_string("x"), "length", 1, restype=c_ulong)
+        send(get_class("NSObject"), "hash", 1, restype=c_ulong)
 
 
 def test_new_object_is_owned() -> None:
@@ -126,8 +133,3 @@ def test_object_adopts_owned_pointer() -> None:
     del wrapper
     assert retain_count(ptr) == 1
     release(ptr)
-
-
-def test_object_sends_messages() -> None:
-    string = Object(make_string("metalloid"))
-    assert string.send("length", restype=c_ulong) == 9

@@ -11,9 +11,11 @@
 - [ ] Objective-C exceptions abort the process and can't be caught (an
       unrecognized selector, mutating an immutable string). Consider a debug
       mode that checks `respondsToSelector:` before sending.
-- [ ] `to_str(nil)` fails with `'NoneType' has no attribute 'decode'`.
-- [ ] Messaging nil silently returns 0 or `None`, which hides bugs.
-      `Object(None)` is accepted too.
+- [x] `to_str(nil)` fails with `'NoneType' has no attribute 'decode'`. It
+      raises `ValueError`, as does a string with no UTF-8 form.
+- [ ] Messaging nil silently returns 0 or `None`, which hides bugs. The type
+      checker now rejects a receiver that may be `None`, and `Object(None)`,
+      but nothing checks at runtime.
 - [ ] `Buffer.numpy()` passes on NumPy's errors when the size isn't a multiple
       of the dtype or the shape doesn't fit. Say it plainly, e.g. "16 bytes
       can't hold shape (3, 2) of float32".
@@ -42,8 +44,11 @@
 - [ ] `run` doesn't check that the buffers hold `threads` elements, or that
       every slot the kernel uses is bound. The kernel then reads and writes
       past the end, with no error.
-- [ ] `make_string` in `tests/test_objc.py` runs without a pool, leaks, and
-      duplicates `from_str`.
+- [x] `make_string` in `tests/test_objc.py` runs without a pool, leaks, and
+      duplicates `from_str`. The tests use `from_str` in a pool.
+- [ ] `from_str` stops at a NUL character: `from_str("a\0b")` is `"a"`. Raise
+      `ValueError` instead, as Python's own C-facing functions do
+      (`os.stat("a\0b")`: "embedded null character").
 
 ## Documentation
 
@@ -53,9 +58,10 @@
 
 ## Typing
 
-- [ ] `send` returns `Any`, so callers annotate every result
-      (`size: int = ...`). Typed helpers would remove that, at the cost of
-      another layer. Weigh it.
+- [x] `send` returns `Any`, so callers annotate every result
+      (`size: int = ...`). `send` is overloaded on `restype` instead (note
+      02), and `Object.send` is gone so there's one place to type. Plain
+      `CDLL` functions still return `Any`.
 
 ## Performance
 

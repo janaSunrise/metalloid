@@ -3,8 +3,8 @@ from ctypes import c_char_p, c_ulong, c_ushort, c_void_p
 import pytest
 
 from metalloid._objc import (
+    AutoreleasePool,
     Object,
-    autorelease_pool,
     from_str,
     get_class,
     release,
@@ -40,18 +40,18 @@ def test_selectors_are_interned() -> None:
 
 
 def test_send_returns_integer() -> None:
-    with autorelease_pool():
+    with AutoreleasePool():
         assert send(from_str("metalloid"), "length", restype=c_ulong) == 9
 
 
 def test_send_round_trips_string() -> None:
-    with autorelease_pool():
+    with AutoreleasePool():
         string = from_str("héllo")
         assert send(string, "UTF8String", restype=c_char_p) == "héllo".encode()
 
 
 def test_from_str_round_trips() -> None:
-    with autorelease_pool():
+    with AutoreleasePool():
         assert to_str(from_str("héllo")) == "héllo"
 
 
@@ -62,7 +62,7 @@ def test_to_str_rejects_nil() -> None:
 
 def test_to_str_rejects_string_without_utf8() -> None:
     lone_surrogate = (c_ushort * 1)(0xD800)
-    with autorelease_pool():
+    with AutoreleasePool():
         string = send(
             get_class("NSString"),
             "stringWithCharacters:length:",
@@ -97,7 +97,7 @@ def test_retain_and_release_balance() -> None:
 
 def test_pool_releases_autoreleased_objects() -> None:
     obj = make_object()
-    with autorelease_pool():
+    with AutoreleasePool():
         send(retain(obj), "autorelease", restype=c_void_p)
         assert retain_count(obj) == 2
     assert retain_count(obj) == 1
@@ -106,7 +106,7 @@ def test_pool_releases_autoreleased_objects() -> None:
 
 def test_pool_drains_on_exception() -> None:
     def autorelease_then_fail(obj: int) -> None:
-        with autorelease_pool():
+        with AutoreleasePool():
             send(retain(obj), "autorelease", restype=c_void_p)
             raise RuntimeError
 

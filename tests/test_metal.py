@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import weakref
 from ctypes import c_float, c_void_p
 
@@ -119,3 +122,36 @@ def test_run_rejects_no_threads(threads: int) -> None:
     buffers = [device.new_buffer(4) for _ in range(3)]
     with pytest.raises(ValueError, match="at least 1"):
         device.run(add, buffers, threads=threads)
+
+
+LEAK_PROBE = f"""
+import sys
+import numpy as np
+from metalloid import Device
+
+print("START", file=sys.stderr, flush=True)
+device = Device()
+library = device.compile({ADD!r})
+add = library.kernel("add")
+buffers = [device.new_buffer(16) for _ in range(3)]
+buffers[0].numpy(np.float32)
+repr(device), repr(library), repr(add), repr(buffers[0])
+device.has_unified_memory, device.recommended_max_working_set_size
+device.max_threads_per_threadgroup, device.max_buffer_length
+add.max_total_threads_per_threadgroup, add.thread_execution_width
+device.run(add, buffers, threads=4)
+del device, library, add, buffers
+"""
+
+
+def test_nothing_autoreleases_outside_a_pool() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", LEAK_PROBE],
+        env={**os.environ, "OBJC_DEBUG_MISSING_POOLS": "YES"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # Loading Metal leaks before START; that's Apple's, not ours.
+    ours = result.stderr.partition("START")[2]
+    assert "MISSING POOLS" not in ours

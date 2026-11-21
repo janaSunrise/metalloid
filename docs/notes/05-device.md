@@ -42,7 +42,7 @@ nothing promises that, so `_metal.py` loads it explicitly.
 Any Metal or Foundation call may autorelease objects, and the headers don't
 say which ones do. So follow Apple's rule from note 03: Metal calls belong
 inside an autorelease pool. `Device()` creates the device inside
-`autorelease_pool()`.
+`AutoreleasePool()`.
 
 To see why, run the call without a pool. `OBJC_DEBUG_MISSING_POOLS` makes the
 runtime print a line for every object that leaks:
@@ -68,6 +68,19 @@ Counting the leaked objects by class:
 
 None of these are ours. Metal reads its settings and bundles while it sets up,
 and autoreleases what it used.
+
+Property reads leak too. Reading `device.name` a million times without a pool
+grew the process by 285 MiB: each read autoreleases the `NSString` and four
+objects Foundation made along the way.
+
+So every public method runs inside a pool, including the property reads that
+return a number. Those autorelease nothing today, but the rule is Apple's, and
+it holds when a measurement stops holding on the next macOS. A test runs the
+whole API with `OBJC_DEBUG_MISSING_POOLS` and fails on any leak.
+
+A pool costs two messages, about 1 µs. `AutoreleasePool` is a class with
+`__enter__` and `__exit__` because the same pool as a `@contextmanager`
+generator took 1.7 µs.
 
 ## Properties are messages
 

@@ -55,8 +55,13 @@ Both lines were run on an `NSObject`. The second one leaks, even after
 class Object:
     def __init__(self, ptr: int, *, owned: bool = False) -> None:
         self.ptr = ptr if owned else retain(ptr)
-        weakref.finalize(self, release, ptr)
+        weakref.finalize(self, _release_in_pool, ptr)
 ```
+
+The finalizer runs whenever Python collects the wrapper, usually outside any
+pool. Releasing the last ownership runs the object's `dealloc`, and that can
+autorelease: a freed `MTLBuffer` autoreleases its device. So
+`_release_in_pool` releases inside a pool of its own.
 
 `owned` says which of note 03's rules applies:
 

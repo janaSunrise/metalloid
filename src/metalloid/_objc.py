@@ -2,8 +2,7 @@
 
 import ctypes
 import weakref
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Callable
 from ctypes import CFUNCTYPE, Structure, c_char_p, c_void_p
 from functools import cache
 from typing import TYPE_CHECKING, Any, overload
@@ -139,7 +138,7 @@ def release(obj: int) -> None:
 def from_str(text: str) -> int:
     """Return a new ``NSString`` holding ``text``.
 
-    The string is autoreleased: use it inside `autorelease_pool`.
+    The string is autoreleased: use it inside `AutoreleasePool`.
 
     Raises:
         ValueError: If Foundation can't make an ``NSString`` from ``text``.
@@ -171,19 +170,35 @@ def to_str(string: int | None) -> str:
     return text.decode()
 
 
-@contextmanager
-def autorelease_pool() -> Generator[None]:
-    """Release the objects autoreleased inside the block when it exits.
+_NSAutoreleasePool = get_class("NSAutoreleasePool")
+
+
+class AutoreleasePool:
+    """Release the objects autoreleased inside the ``with`` block when it exits.
 
     Without a pool, autoreleased objects are never released.
     """
-    pool = send(get_class("NSAutoreleasePool"), "new", restype=c_void_p)
-    if pool is None:
-        raise MemoryError("Foundation could not create an autorelease pool")
-    try:
-        yield
-    finally:
-        send(pool, "drain", restype=None)
+
+    __slots__ = ("_pool",)
+
+    def __enter__(self) -> None:
+        pool = send(_NSAutoreleasePool, "new", restype=c_void_p)
+        if pool is None:
+            raise MemoryError("Foundation could not create an autorelease pool")
+        self._pool = pool
+
+    def __exit__(self, *exc_info: object) -> None:
+        send(self._pool, "drain", restype=None)
+
+
+def _release_in_pool(obj: int) -> None:
+    """Release ``obj`` inside a pool, since finalizers run outside ours.
+
+    Freeing an object can autorelease others: a freed ``MTLBuffer``
+    autoreleases its device.
+    """
+    with AutoreleasePool():
+        release(obj)
 
 
 class Object:
@@ -205,4 +220,4 @@ class Object:
                 wrapper. Otherwise the wrapper retains ``ptr``.
         """
         self.ptr = ptr if owned else retain(ptr)
-        weakref.finalize(self, release, ptr)
+        weakref.finalize(self, _release_in_pool, ptr)

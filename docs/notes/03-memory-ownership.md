@@ -86,7 +86,7 @@ that autoreleases.
 raises:
 
 ```py
-with autorelease_pool():
+with AutoreleasePool():
     s = from_str("...")         # released when the block exits
 ```
 

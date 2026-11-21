@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from metalloid._objc import Object, autorelease_pool, from_str, send, to_str
+from metalloid._objc import AutoreleasePool, Object, from_str, send, to_str
 
 _metal = ctypes.CDLL("/System/Library/Frameworks/Metal.framework/Metal")
 
@@ -62,7 +62,7 @@ class Device:
         Raises:
             MetalError: If the system has no Metal device.
         """
-        with autorelease_pool():
+        with AutoreleasePool():
             ptr: int | None = _metal.MTLCreateSystemDefaultDevice()
             if ptr is None:
                 raise MetalError("no Metal device found")
@@ -80,28 +80,33 @@ class Device:
     @property
     def name(self) -> str:
         """The GPU's full name."""
-        return to_str(send(self._obj.ptr, "name", restype=c_void_p))
+        with AutoreleasePool():
+            return to_str(send(self._obj.ptr, "name", restype=c_void_p))
 
     @property
     def has_unified_memory(self) -> bool:
         """Whether the GPU shares its memory with the CPU."""
-        return send(self._obj.ptr, "hasUnifiedMemory", restype=c_bool)
+        with AutoreleasePool():
+            return send(self._obj.ptr, "hasUnifiedMemory", restype=c_bool)
 
     @property
     def recommended_max_working_set_size(self) -> int:
         """Bytes the GPU can use without hurting performance."""
-        return send(self._obj.ptr, "recommendedMaxWorkingSetSize", restype=c_uint64)
+        with AutoreleasePool():
+            return send(self._obj.ptr, "recommendedMaxWorkingSetSize", restype=c_uint64)
 
     @property
     def max_threads_per_threadgroup(self) -> tuple[int, int, int]:
         """The largest threadgroup as ``(width, height, depth)``."""
-        size = send(self._obj.ptr, "maxThreadsPerThreadgroup", restype=_MTLSize)
+        with AutoreleasePool():
+            size = send(self._obj.ptr, "maxThreadsPerThreadgroup", restype=_MTLSize)
         return size.width, size.height, size.depth
 
     @property
     def max_buffer_length(self) -> int:
         """The largest buffer, in bytes, the GPU can allocate."""
-        return send(self._obj.ptr, "maxBufferLength", restype=c_ulong)
+        with AutoreleasePool():
+            return send(self._obj.ptr, "maxBufferLength", restype=c_ulong)
 
     def new_buffer(self, nbytes: int) -> "Buffer":
         """Allocate ``nbytes`` of zeroed memory shared by the CPU and GPU.
@@ -110,7 +115,7 @@ class Device:
             AllocationError: If Metal can't allocate it. ``nbytes`` must be
                 between 1 and `max_buffer_length`.
         """
-        with autorelease_pool():
+        with AutoreleasePool():
             ptr = send(
                 self._obj.ptr,
                 "newBufferWithLength:options:",
@@ -119,11 +124,10 @@ class Device:
                 restype=c_void_p,
                 argtypes=(c_ulong, c_ulong),
             )
+            if ptr is None:
+                raise AllocationError(f"Metal could not allocate {nbytes} bytes")
 
-        if ptr is None:
-            raise AllocationError(f"Metal could not allocate a {nbytes}-byte buffer")
-
-        return Buffer(Object(ptr, owned=True), nbytes)
+            return Buffer(Object(ptr, owned=True), nbytes)
 
     def compile(self, source: str) -> "Library":
         """Compile Metal Shading Language ``source`` into a library.
@@ -131,7 +135,7 @@ class Device:
         Raises:
             CompileError: If the source doesn't compile.
         """
-        with autorelease_pool():
+        with AutoreleasePool():
             error = c_void_p()
             ptr = send(
                 self._obj.ptr,
@@ -162,7 +166,7 @@ class Device:
             raise ValueError(f"threads must be at least 1, got {threads}")
         group = min(kernel.max_total_threads_per_threadgroup, threads)
 
-        with autorelease_pool():
+        with AutoreleasePool():
             commands = send(self._queue.ptr, "commandBuffer", restype=c_void_p)
             if commands is None:
                 raise MetalError("Metal could not create a command buffer")
@@ -266,7 +270,7 @@ class Library:
     @property
     def function_names(self) -> list[str]:
         """The names of the library's functions, kernels among them, sorted."""
-        with autorelease_pool():
+        with AutoreleasePool():
             array = send(self._obj.ptr, "functionNames", restype=c_void_p)
             assert array is not None, "functionNames is nonnull in MTLLibrary.h"
             count = send(array, "count", restype=c_ulong)
@@ -283,7 +287,7 @@ class Library:
             KernelNotFoundError: If the library has no kernel called ``name``.
             CompileError: If Metal can't build a pipeline for it.
         """
-        with autorelease_pool():
+        with AutoreleasePool():
             ptr = send(
                 self._obj.ptr,
                 "newFunctionWithName:",
@@ -328,9 +332,11 @@ class Kernel:
     @property
     def max_total_threads_per_threadgroup(self) -> int:
         """The most threads one threadgroup can have for this kernel."""
-        return send(self._obj.ptr, "maxTotalThreadsPerThreadgroup", restype=c_ulong)
+        with AutoreleasePool():
+            return send(self._obj.ptr, "maxTotalThreadsPerThreadgroup", restype=c_ulong)
 
     @property
     def thread_execution_width(self) -> int:
         """Threads the GPU runs in lock-step; size threadgroups in multiples."""
-        return send(self._obj.ptr, "threadExecutionWidth", restype=c_ulong)
+        with AutoreleasePool():
+            return send(self._obj.ptr, "threadExecutionWidth", restype=c_ulong)

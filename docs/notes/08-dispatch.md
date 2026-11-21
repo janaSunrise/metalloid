@@ -42,7 +42,7 @@ it's ours: `Object(ptr, owned=True)`.
 
 `commandBuffer` and `computeCommandEncoder` don't start with `new`, so we
 don't own what they return. Both are autoreleased, and the whole `run` happens
-inside one `autorelease_pool()` (note 03).
+inside one `AutoreleasePool()` (note 03).
 
 A command buffer also holds on to what it uses:
 

@@ -39,8 +39,9 @@
 
 ## Correctness
 
-- [ ] Autorelease pools: creation calls have one, property reads don't. Decide
-      on a pool in every public method (note 05).
+- [x] Autorelease pools: creation calls have one, property reads don't. Every
+      public method has one now, and so does the finalizer's `release`: reading
+      `device.name` and freeing buffers leaked (note 05).
 - [ ] Nothing stops the CPU reading a buffer while the GPU writes it (note 06).
       `run` waits, so this holds today. Revisit if `run` stops waiting
       (note 08).
@@ -70,9 +71,9 @@
 
 - [ ] Measure the cost of `send`: the arity check, the cache lookup, and the
       ctypes call, against the time a whole `run` takes.
-- [ ] Each pool is two extra messages through `NSAutoreleasePool`.
-      `objc_autoreleasePoolPush` and `objc_autoreleasePoolPop` are faster but
-      aren't in the public headers.
+- [ ] Each pool is two extra messages through `NSAutoreleasePool`, about 1 µs,
+      which triples a property read. `objc_autoreleasePoolPush` and
+      `objc_autoreleasePoolPop` take 0.27 µs but aren't in the public headers.
 
 ## Project
 

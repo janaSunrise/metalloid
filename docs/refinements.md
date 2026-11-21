@@ -2,11 +2,11 @@
 
 ## Errors
 
-- [ ] One base exception, `MetalError`, for everything metalloid raises.
-      Today it's `RuntimeError` (no device, GPU failure), `MemoryError`
-      (buffer), `LookupError` (kernel name), `ValueError` (thread count), and
-      `CompileError`.
-- [ ] `new_buffer(0)` raises `MemoryError`. It's a bad argument, not a lack of
+- [x] One base exception, `MetalError`, for every failure from Metal.
+      `CompileError`, `KernelNotFoundError` (also a `LookupError`), and
+      `AllocationError` (also a `MemoryError`) derive from it. Bad arguments
+      stay `ValueError` and `TypeError`.
+- [ ] `new_buffer(0)` raises `AllocationError`. It's a bad argument, not a lack of
       memory: check `nbytes` first and raise `ValueError` with the valid range.
 - [ ] Objective-C exceptions abort the process and can't be caught (an
       unrecognized selector, mutating an immutable string). Consider a debug

@@ -106,7 +106,7 @@ A library can hold many functions.
 
 `newFunctionWithName:` picks one out, or returns nil if no kernel has that name.
 That's a different failure from a compile error, with no error object, so
-`Library.kernel` raises `LookupError`.
+`Library.kernel` raises `KernelNotFoundError`.
 
 ## The pipeline
 
@@ -137,7 +137,7 @@ execute the same instruction together, which the spec calls SIMD-groups:
 ```py
 device = Device()
 library = device.compile(source)    # CompileError if the source is wrong
-add = library.kernel("add")         # LookupError if there's no kernel "add"
+add = library.kernel("add")         # KernelNotFoundError if there's no "add"
 add.thread_execution_width          # 32
 ```
 

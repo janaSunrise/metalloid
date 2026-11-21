@@ -136,7 +136,7 @@ A command buffer ends as either completed (4) or error (5). On error, its
 > The property remains `nil` unless the GPU can't successfully run the command
 > buffer.
 
-`run` checks the status after waiting and raises `RuntimeError` with that
+`run` checks the status after waiting and raises `MetalError` with that
 description.
 
 ## Using it

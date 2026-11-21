@@ -22,7 +22,7 @@ Every part of that line maps to Python:
 | --------------------- | ---------------------------------------------- |
 | `id <MTLDevice>`      | `restype = c_void_p`, without it: `0xb7fdb0`, not `0x100b7fdb0` |
 | `(void)`              | `argtypes = []`                                |
-| `__nullable`          | may return `None`, `Device()` raises `RuntimeError` |
+| `__nullable`          | may return `None`, `Device()` raises `MetalError` |
 | `NS_RETURNS_RETAINED` | we own it: `Object(ptr, owned=True)`           |
 
 Every call returns the same device, and every call hands us one more ticket.

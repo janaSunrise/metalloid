@@ -23,8 +23,20 @@ _MTL_RESOURCE_STORAGE_MODE_SHARED = 0
 _MTL_COMMAND_BUFFER_STATUS_ERROR = 5
 
 
-class CompileError(Exception):
-    """Metal could not compile a kernel. The message is the compiler's."""
+class MetalError(Exception):
+    """Base class of metalloid's errors."""
+
+
+class CompileError(MetalError):
+    """Metal couldn't compile a kernel. The message is the compiler's."""
+
+
+class KernelNotFoundError(MetalError, LookupError):
+    """A library has no kernel with the requested name."""
+
+
+class AllocationError(MetalError, MemoryError):
+    """Metal couldn't allocate a buffer."""
 
 
 def _describe(error: c_void_p) -> str:
@@ -45,18 +57,18 @@ class Device:
         """Open the default GPU.
 
         Raises:
-            RuntimeError: If the system has no Metal device.
+            MetalError: If the system has no Metal device.
         """
         with autorelease_pool():
             ptr: int | None = _metal.MTLCreateSystemDefaultDevice()
             if ptr is None:
-                raise RuntimeError("no Metal device found")
+                raise MetalError("no Metal device found")
             self._obj = Object(ptr, owned=True)
 
             # One queue for the device's lifetime as per Apple.
             queue: int | None = self._obj.send("newCommandQueue", restype=c_void_p)
             if queue is None:
-                raise RuntimeError("Metal could not create a command queue")
+                raise MetalError("Metal could not create a command queue")
             self._queue = Object(queue, owned=True)
 
     @property
@@ -92,7 +104,7 @@ class Device:
         """Allocate ``nbytes`` of zeroed memory shared by the CPU and GPU.
 
         Raises:
-            MemoryError: If Metal can't allocate it. ``nbytes`` must be
+            AllocationError: If Metal can't allocate it. ``nbytes`` must be
                 between 1 and `max_buffer_length`.
         """
         with autorelease_pool():
@@ -105,7 +117,7 @@ class Device:
             )
 
         if ptr is None:
-            raise MemoryError(f"Metal could not allocate a {nbytes}-byte buffer")
+            raise AllocationError(f"Metal could not allocate a {nbytes}-byte buffer")
 
         return Buffer(Object(ptr, owned=True), nbytes)
 
@@ -138,7 +150,7 @@ class Device:
 
         Raises:
             ValueError: If ``threads`` is less than 1.
-            RuntimeError: If the GPU fails to run the kernel.
+            MetalError: If the GPU fails to run the kernel.
         """
         if threads < 1:
             raise ValueError(f"threads must be at least 1, got {threads}")
@@ -181,7 +193,7 @@ class Device:
             status = send(commands, "status", restype=c_ulong)
             if status == _MTL_COMMAND_BUFFER_STATUS_ERROR:
                 error = c_void_p(send(commands, "error", restype=c_void_p))
-                raise RuntimeError(_describe(error))
+                raise MetalError(_describe(error))
 
 
 class Buffer:
@@ -237,7 +249,7 @@ class Library:
         """Return the kernel function ``name``, ready to run.
 
         Raises:
-            LookupError: If the library has no kernel called ``name``.
+            KernelNotFoundError: If the library has no kernel called ``name``.
             CompileError: If Metal can't build a pipeline for it.
         """
         with autorelease_pool():
@@ -248,7 +260,7 @@ class Library:
                 argtypes=(c_void_p,),
             )
             if ptr is None:
-                raise LookupError(f"no kernel named {name!r} in the library")
+                raise KernelNotFoundError(f"no kernel named {name!r} in the library")
             function = Object(ptr, owned=True)
 
             error = c_void_p()

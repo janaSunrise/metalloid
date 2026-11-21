@@ -4,7 +4,13 @@ from ctypes import c_float, c_void_p
 import numpy as np
 import pytest
 
-from metalloid._metal import CompileError, Device
+from metalloid._metal import (
+    AllocationError,
+    CompileError,
+    Device,
+    KernelNotFoundError,
+    MetalError,
+)
 
 ADD = """
 kernel void add(const device float *a [[buffer(0)]],
@@ -14,6 +20,21 @@ kernel void add(const device float *a [[buffer(0)]],
     out[i] = a[i] + b[i];
 }
 """
+
+
+@pytest.mark.parametrize(
+    ("error", "builtin"),
+    [
+        (CompileError, Exception),
+        (KernelNotFoundError, LookupError),
+        (AllocationError, MemoryError),
+    ],
+)
+def test_errors_are_metal_errors(
+    error: type[Exception], builtin: type[Exception]
+) -> None:
+    assert issubclass(error, MetalError)
+    assert issubclass(error, builtin)
 
 
 def test_device_name() -> None:
@@ -60,13 +81,13 @@ def test_array_keeps_buffer_alive() -> None:
 
 
 def test_new_buffer_rejects_zero_bytes() -> None:
-    with pytest.raises(MemoryError):
+    with pytest.raises(AllocationError):
         Device().new_buffer(0)
 
 
 def test_new_buffer_rejects_more_than_max() -> None:
     device = Device()
-    with pytest.raises(MemoryError):
+    with pytest.raises(AllocationError):
         device.new_buffer(device.max_buffer_length + 1)
 
 
@@ -82,7 +103,7 @@ def test_compile_error_carries_compiler_message() -> None:
 
 
 def test_missing_kernel_raises() -> None:
-    with pytest.raises(LookupError, match="nope"):
+    with pytest.raises(KernelNotFoundError, match="nope"):
         Device().compile(ADD).kernel("nope")
 
 

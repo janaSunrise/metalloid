@@ -144,4 +144,4 @@ add.thread_execution_width          # 32
 ## Open questions
 
 - `add` is ready and the buffers exist. How do we put buffers in its slots
-  and tell the GPU how many threads to run?
+  and tell the GPU how many threads to run? See note 08.

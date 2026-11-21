@@ -35,7 +35,9 @@ values." Reading the declaration the usual way:
 
 ## Shared memory
 
-The CPU and GPU share access to the resource, allocated in system memory.
+Apple describes `MTLStorageModeShared`:
+
+> The CPU and GPU share access to the resource, allocated in system memory.
 
 On Apple silicon there is only one memory, so "shared" is literal: the CPU and
 GPU read the same bytes, not copies. The buffer's `contents` gives the CPU
@@ -172,4 +174,5 @@ Apple doesn't say why the two numbers differ.
 
 ## Open questions
 
-- The GPU hasn't touched a buffer yet. How does a kernel receive one?
+- The GPU hasn't touched a buffer yet. How does a kernel receive one? Its
+  slots in note 07, binding them in note 08.

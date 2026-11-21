@@ -84,3 +84,26 @@ def test_compile_error_carries_compiler_message() -> None:
 def test_missing_kernel_raises() -> None:
     with pytest.raises(LookupError, match="nope"):
         Device().compile(ADD).kernel("nope")
+
+
+@pytest.mark.parametrize("n", [1, 1000, 100_003])
+def test_run_adds_arrays(n: int) -> None:
+    device = Device()
+    add = device.compile(ADD).kernel("add")
+    a, b, out = (device.new_buffer(4 * n) for _ in range(3))
+    a.numpy(np.float32)[:] = np.arange(n)
+    b.numpy(np.float32)[:] = 2 * np.arange(n)
+
+    device.run(add, [a, b, out], threads=n)
+
+    expected = a.numpy(np.float32) + b.numpy(np.float32)
+    np.testing.assert_array_equal(out.numpy(np.float32), expected)
+
+
+@pytest.mark.parametrize("threads", [0, -1])
+def test_run_rejects_no_threads(threads: int) -> None:
+    device = Device()
+    add = device.compile(ADD).kernel("add")
+    buffers = [device.new_buffer(4) for _ in range(3)]
+    with pytest.raises(ValueError, match="at least 1"):
+        device.run(add, buffers, threads=threads)

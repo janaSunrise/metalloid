@@ -16,13 +16,12 @@ send `release`.
 
 ## `__del__` is not reliable
 
-It is not guaranteed that `__del__()` methods are called for objects that
-still exist when the interpreter exits.
+Python's data model says so, and points to the alternative:
 
-The same entry points elsewhere:
-
-`weakref.finalize` provides a straightforward way to register a cleanup
-function to be called when an object is garbage collected.
+> It is not guaranteed that `__del__()` methods are called for objects that
+> still exist when the interpreter exits. `weakref.finalize` provides a
+> straightforward way to register a cleanup function to be called when an
+> object is garbage collected.
 
 ## `weakref.finalize`
 
@@ -93,8 +92,8 @@ del string                                 # release runs here
 
 `del` doesn't call the finalizer directly:
 
-`del x` doesn't directly call `x.__del__()`. The former decrements the
-reference count for `x` by one, and the latter is only called when `x`'s
-reference count reaches zero.
+> `del x` doesn't directly call `x.__del__()` - the former decrements the
+> reference count for `x` by one, and the latter is only called when `x`'s
+> reference count reaches zero.
 
 In CPython that happens right away when nothing else refers to `x`.

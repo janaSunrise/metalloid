@@ -32,14 +32,14 @@ MTLDevice                             the GPU; creates everything else
  ├─ MTLBuffer                         memory the kernel reads and writes
  └─ MTLCommandQueue                   where work is submitted
      └─ MTLCommandBuffer              one batch of work
-         └─ MTLComputeCommandEncoder  records pipeline + buffers + thread count
+         └─ MTLComputeCommandEncoder  encodes pipeline + buffers + thread count
 ```
 
-## Record, commit, wait
+## Encode, commit, wait
 
 A kernel is not called like a function.
 
-1. **Record**: An encoder writes down which pipeline to use, which buffers to
+1. **Encode**: An encoder encodes which pipeline to use, which buffers to
    bind, and how many threads to launch.
 2. **Commit**: The command buffer is handed to the GPU.
 3. **Wait**: The GPU runs it asynchronously. The CPU blocks only when it needs
@@ -47,5 +47,5 @@ A kernel is not called like a function.
 
 ## Open questions
 
-- What is pipeline and buffer in this context? Buffers in note 06,
-  pipelines in note 07.
+- What are pipelines and buffers in this context? Buffers in note 06,
+  pipelines in note 07, and running them in note 08.

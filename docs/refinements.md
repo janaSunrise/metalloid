@@ -3,8 +3,9 @@
 ## Errors
 
 - [ ] One base exception, `MetalError`, for everything metalloid raises.
-      Today it's `RuntimeError` (no device), `MemoryError` (buffer),
-      `LookupError` (kernel name), and `CompileError`.
+      Today it's `RuntimeError` (no device, GPU failure), `MemoryError`
+      (buffer), `LookupError` (kernel name), `ValueError` (thread count), and
+      `CompileError`.
 - [ ] `new_buffer(0)` raises `MemoryError`. It's a bad argument, not a lack of
       memory: check `nbytes` first and raise `ValueError` with the valid range.
 - [ ] Objective-C exceptions abort the process and can't be caught (an
@@ -36,7 +37,11 @@
 - [ ] Autorelease pools: creation calls have one, property reads don't. Decide
       on a pool in every public method (note 05).
 - [ ] Nothing stops the CPU reading a buffer while the GPU writes it (note 06).
-      Matters once dispatch exists.
+      `run` waits, so this holds today. Revisit if `run` stops waiting
+      (note 08).
+- [ ] `run` doesn't check that the buffers hold `threads` elements, or that
+      every slot the kernel uses is bound. The kernel then reads and writes
+      past the end, with no error.
 - [ ] `make_string` in `tests/test_objc.py` runs without a pool, leaks, and
       duplicates `from_str`.
 
@@ -55,7 +60,7 @@
 ## Performance
 
 - [ ] Measure the cost of `send`: the arity check, the cache lookup, and the
-      ctypes call. Do it once dispatch exists.
+      ctypes call, against the time a whole `run` takes.
 - [ ] Each pool is two extra messages through `NSAutoreleasePool`.
       `objc_autoreleasePoolPush` and `objc_autoreleasePoolPop` are faster but
       aren't in the public headers.

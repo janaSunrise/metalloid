@@ -1,4 +1,5 @@
 import ctypes
+from collections.abc import Sequence
 from ctypes import Structure, byref, c_bool, c_ubyte, c_uint64, c_ulong, c_void_p
 from typing import Any
 
@@ -18,13 +19,16 @@ _metal.MTLCreateSystemDefaultDevice.restype = c_void_p
 # MTLStorageModeShared << MTLResourceStorageModeShift: memory the CPU and GPU share.
 _MTL_RESOURCE_STORAGE_MODE_SHARED = 0
 
+# MTLCommandBufferStatusError: the GPU couldn't run the command buffer.
+_MTL_COMMAND_BUFFER_STATUS_ERROR = 5
+
 
 class CompileError(Exception):
     """Metal could not compile a kernel. The message is the compiler's."""
 
 
 def _describe(error: c_void_p) -> str:
-    """Return the message of the ``NSError`` an out-parameter received."""
+    """Return the description of the ``NSError`` in ``error``, if there is one."""
     if error.value is None:
         return "Metal reported no error description"
     return to_str(send(error.value, "localizedDescription", restype=c_void_p))
@@ -45,11 +49,15 @@ class Device:
         """
         with autorelease_pool():
             ptr: int | None = _metal.MTLCreateSystemDefaultDevice()
+            if ptr is None:
+                raise RuntimeError("no Metal device found")
+            self._obj = Object(ptr, owned=True)
 
-        if ptr is None:
-            raise RuntimeError("no Metal device found")
-
-        self._obj = Object(ptr, owned=True)
+            # One queue for the device's lifetime as per Apple.
+            queue: int | None = self._obj.send("newCommandQueue", restype=c_void_p)
+            if queue is None:
+                raise RuntimeError("Metal could not create a command queue")
+            self._queue = Object(queue, owned=True)
 
     @property
     def name(self) -> str:
@@ -121,6 +129,59 @@ class Device:
                 raise CompileError(_describe(error))
 
         return Library(self, Object(ptr, owned=True))
+
+    def run(self, kernel: "Kernel", buffers: Sequence["Buffer"], threads: int) -> None:
+        """Run ``kernel`` on ``threads`` GPU threads and wait until it finishes.
+
+        ``buffers[i]`` fills the kernel's ``[[buffer(i)]]`` slot, and each
+        thread gets its index in ``[[thread_position_in_grid]]``.
+
+        Raises:
+            ValueError: If ``threads`` is less than 1.
+            RuntimeError: If the GPU fails to run the kernel.
+        """
+        if threads < 1:
+            raise ValueError(f"threads must be at least 1, got {threads}")
+        group = min(kernel.max_total_threads_per_threadgroup, threads)
+
+        with autorelease_pool():
+            commands = self._queue.send("commandBuffer", restype=c_void_p)
+            encoder = send(commands, "computeCommandEncoder", restype=c_void_p)
+
+            send(
+                encoder,
+                "setComputePipelineState:",
+                kernel._obj.ptr,
+                restype=None,
+                argtypes=(c_void_p,),
+            )
+            for idx, buffer in enumerate(buffers):
+                send(
+                    encoder,
+                    "setBuffer:offset:atIndex:",
+                    buffer._obj.ptr,
+                    0,
+                    idx,
+                    restype=None,
+                    argtypes=(c_void_p, c_ulong, c_ulong),
+                )
+            send(
+                encoder,
+                "dispatchThreads:threadsPerThreadgroup:",
+                _MTLSize(threads, 1, 1),
+                _MTLSize(group, 1, 1),
+                restype=None,
+                argtypes=(_MTLSize, _MTLSize),
+            )
+            send(encoder, "endEncoding", restype=None)
+
+            send(commands, "commit", restype=None)
+            send(commands, "waitUntilCompleted", restype=None)
+
+            status = send(commands, "status", restype=c_ulong)
+            if status == _MTL_COMMAND_BUFFER_STATUS_ERROR:
+                error = c_void_p(send(commands, "error", restype=c_void_p))
+                raise RuntimeError(_describe(error))
 
 
 class Buffer:

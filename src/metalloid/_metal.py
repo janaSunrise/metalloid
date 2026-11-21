@@ -74,6 +74,9 @@ class Device:
                 raise MetalError("Metal could not create a command queue")
             self._queue = Object(queue, owned=True)
 
+    def __repr__(self) -> str:
+        return f"<Device {self.name!r}>"
+
     @property
     def name(self) -> str:
         """The GPU's full name."""
@@ -218,6 +221,9 @@ class Buffer:
         self._contents = contents
         self.nbytes = nbytes
 
+    def __repr__(self) -> str:
+        return f"<Buffer {self.nbytes} bytes>"
+
     def __buffer__(self, flags: int, /) -> memoryview:
         """Expose the buffer's memory to the buffer protocol.
 
@@ -254,6 +260,22 @@ class Library:
         self._device = device
         self._obj = obj
 
+    def __repr__(self) -> str:
+        return f"<Library {self.function_names!r}>"
+
+    @property
+    def function_names(self) -> list[str]:
+        """The names of the library's functions, kernels among them, sorted."""
+        with autorelease_pool():
+            array = send(self._obj.ptr, "functionNames", restype=c_void_p)
+            assert array is not None, "functionNames is nonnull in MTLLibrary.h"
+            count = send(array, "count", restype=c_ulong)
+            names = (
+                send(array, "objectAtIndex:", i, restype=c_void_p, argtypes=(c_ulong,))
+                for i in range(count)
+            )
+            return sorted(to_str(name) for name in names)
+
     def kernel(self, name: str) -> "Kernel":
         """Return the kernel function ``name``, ready to run.
 
@@ -285,15 +307,23 @@ class Library:
             if ptr is None:
                 raise CompileError(_describe(error))
 
-        return Kernel(Object(ptr, owned=True))
+        return Kernel(Object(ptr, owned=True), name)
 
 
 class Kernel:
-    """A kernel function compiled into a pipeline the GPU can run."""
+    """A kernel function compiled into a pipeline the GPU can run.
 
-    def __init__(self, obj: Object) -> None:
-        """Wrap the ``MTLComputePipelineState`` in ``obj``."""
+    Attributes:
+        name: The kernel function's name in its source.
+    """
+
+    def __init__(self, obj: Object, name: str) -> None:
+        """Wrap the ``MTLComputePipelineState`` in ``obj``. Use `Library.kernel`."""
         self._obj = obj
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"<Kernel {self.name!r}>"
 
     @property
     def max_total_threads_per_threadgroup(self) -> int:

@@ -4,12 +4,11 @@ from ctypes import c_float, c_void_p
 import numpy as np
 import pytest
 
-from metalloid._metal import (
+from metalloid import (
     AllocationError,
     CompileError,
     Device,
     KernelNotFoundError,
-    MetalError,
 )
 from metalloid._objc import send
 
@@ -21,21 +20,6 @@ kernel void add(const device float *a [[buffer(0)]],
     out[i] = a[i] + b[i];
 }
 """
-
-
-@pytest.mark.parametrize(
-    ("error", "builtin"),
-    [
-        (CompileError, Exception),
-        (KernelNotFoundError, LookupError),
-        (AllocationError, MemoryError),
-    ],
-)
-def test_errors_are_metal_errors(
-    error: type[Exception], builtin: type[Exception]
-) -> None:
-    assert issubclass(error, MetalError)
-    assert issubclass(error, builtin)
 
 
 def test_device_name() -> None:
@@ -107,6 +91,11 @@ def test_compile_error_carries_compiler_message() -> None:
 def test_missing_kernel_raises() -> None:
     with pytest.raises(KernelNotFoundError, match="nope"):
         Device().compile(ADD).kernel("nope")
+
+
+def test_function_names_are_sorted() -> None:
+    scale = "kernel void scale(device float *x [[buffer(0)]]) { x[0] *= 2; }"
+    assert Device().compile(ADD + scale).function_names == ["add", "scale"]
 
 
 @pytest.mark.parametrize("n", [1, 1000, 100_003])

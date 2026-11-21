@@ -22,10 +22,13 @@
 
 ## API
 
-- [ ] Public API: nothing is exported from `metalloid`, so
-      `from metalloid import Device` fails.
-- [ ] `__repr__` for `Device`, `Buffer`, `Library`, and `Kernel`, e.g.
-      `<Device 'Apple M1 Pro'>`, `<Buffer 16 bytes>`.
+- [x] Public API: nothing is exported from `metalloid`, so
+      `from metalloid import Device` fails. `Device` and the errors are
+      exported. `Buffer`, `Library`, and `Kernel` aren't yet, so they can't be
+      used in annotations without importing `metalloid._metal`.
+- [x] `__repr__` for `Device`, `Buffer`, `Library`, and `Kernel`, e.g.
+      `<Device 'Apple M1 Pro'>`, `<Buffer 16 bytes>`, `<Library ['add']>`,
+      `<Kernel 'add'>`.
 - [ ] `Device()` opens the GPU on every call. Consider a cached default device.
 - [ ] Buffers can only be created empty. Add creating one from a NumPy array,
       or with a dtype and shape directly.

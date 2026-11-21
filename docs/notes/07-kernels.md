@@ -102,7 +102,7 @@ program_source:6:21: error: use of undeclared identifier 'c'
 
 ## Finding the function
 
-A library can hold many functions.
+A library can hold many functions. Its `functionNames` property lists them.
 
 `newFunctionWithName:` picks one out, or returns nil if no kernel has that name.
 That's a different failure from a compile error, with no error object, so

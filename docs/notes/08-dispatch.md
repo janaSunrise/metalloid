@@ -155,9 +155,6 @@ device.run(add, [a, b, out], threads=n)
 out.numpy()[:4]             # array([0., 3., 6., 9.], dtype=float32), from the GPU
 ```
 
-The tests compare it with NumPy's own `a + b` for 1, 1000, and 100,003
-elements.
-
 ## Open questions
 
 - `run` waits for every kernel. How long is that round trip, and when is it

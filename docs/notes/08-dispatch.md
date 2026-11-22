@@ -146,13 +146,13 @@ device = Device()
 add = device.compile(source).kernel("add")
 
 n = 1000
-a, b, out = (device.new_buffer(4 * n) for _ in range(3))
-a.numpy(np.float32)[:] = np.arange(n)
-b.numpy(np.float32)[:] = 2 * np.arange(n)
+a = device.new_buffer_from(np.arange(n, dtype=np.float32))
+b = device.new_buffer_from(2 * np.arange(n, dtype=np.float32))
+out = device.new_buffer(n, np.float32)
 
 device.run(add, [a, b, out], threads=n)
 
-out.numpy(np.float32)[:4]   # array([0., 3., 6., 9.], dtype=float32), from the GPU
+out.numpy()[:4]             # array([0., 3., 6., 9.], dtype=float32), from the GPU
 ```
 
 The tests compare it with NumPy's own `a + b` for 1, 1000, and 100,003

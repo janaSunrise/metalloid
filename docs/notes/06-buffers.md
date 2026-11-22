@@ -121,13 +121,14 @@ class Buffer:
     def __buffer__(self, flags):
         return memoryview(the 16 bytes at contents)
 
-    def numpy(self, dtype, shape=-1):
-        return np.frombuffer(self, dtype=dtype).reshape(shape)
+    def numpy(self):
+        return np.frombuffer(self, dtype=self.dtype).reshape(self.shape)
 ```
 
 `np.frombuffer(self)` asks the `Buffer` for its memory, Python calls
 `__buffer__`, and the array that comes back refers to the `Buffer`, exactly as
-it referred to `data` above.
+it referred to `data` above. The `dtype` and `shape` are the ones the buffer
+was made with (note 09).
 
 ### The chain
 
@@ -150,13 +151,13 @@ and the `Buffer` are gone, `Object` releases the `MTLBuffer` (note 04).
 
 ```py
 device = Device()
-buffer = device.new_buffer(16)          # 16 zeroed bytes
+buffer = device.new_buffer(4, np.float32)   # 16 zeroed bytes
 
-x = buffer.numpy(np.float32)            # array([0., 0., 0., 0.])
-x[:] = [1, 2, 3, 4]                     # written straight into GPU memory
+x = buffer.numpy()                  # array([0., 0., 0., 0.], dtype=float32)
+x[:] = [1, 2, 3, 4]                 # written straight into GPU memory
 
-grid = buffer.numpy(np.float32, (2, 2)) # another view of the same bytes
-grid[1, 1]                              # 4.0
+grid = x.reshape(2, 2)              # another view of the same bytes
+grid[1, 1]                          # 4.0
 ```
 
 Every view is the same memory. A write through one shows up in all of them.

@@ -1,6 +1,16 @@
 import ctypes
+import math
 from collections.abc import Sequence
-from ctypes import Structure, byref, c_bool, c_ubyte, c_uint64, c_ulong, c_void_p
+from ctypes import (
+    Structure,
+    byref,
+    c_bool,
+    c_char_p,
+    c_ubyte,
+    c_uint64,
+    c_ulong,
+    c_void_p,
+)
 from typing import Any
 
 import numpy as np
@@ -51,6 +61,19 @@ class _MTLSize(Structure):
     width: int
     height: int
     depth: int
+
+
+def _threadgroup(kernel: "Kernel", dimensions: int) -> _MTLSize:
+    """Return the largest threadgroup for ``kernel`` on a grid of ``dimensions``.
+
+    A 2D or 3D threadgroup is one SIMD-group wide and as tall as the limit
+    allows, as in Apple's "Calculating threadgroup and grid sizes".
+    """
+    total = kernel.max_total_threads_per_threadgroup
+    if dimensions == 1:
+        return _MTLSize(total, 1, 1)
+    width = kernel.thread_execution_width
+    return _MTLSize(width, total // width, 1)
 
 
 class Device:
@@ -108,13 +131,21 @@ class Device:
         with AutoreleasePool():
             return send(self._obj.ptr, "maxBufferLength", restype=c_ulong)
 
-    def new_buffer(self, nbytes: int) -> "Buffer":
-        """Allocate ``nbytes`` of zeroed memory shared by the CPU and GPU.
+    def new_buffer(
+        self, shape: int | tuple[int, ...], dtype: npt.DTypeLike
+    ) -> "Buffer":
+        """Allocate a zeroed buffer of ``shape`` and ``dtype``, like `numpy.zeros`.
 
         Raises:
-            AllocationError: If Metal can't allocate it. ``nbytes`` must be
-                between 1 and `max_buffer_length`.
+            TypeError: If ``dtype`` holds Python objects.
+            ValueError: If the buffer would hold no bytes, or more than
+                `max_buffer_length`.
+            AllocationError: If Metal can't allocate it.
         """
+        shape = (shape,) if isinstance(shape, int) else tuple(shape)
+        dtype = np.dtype(dtype)
+        nbytes = self._check_size(shape, dtype)
+
         with AutoreleasePool():
             ptr = send(
                 self._obj.ptr,
@@ -127,7 +158,50 @@ class Device:
             if ptr is None:
                 raise AllocationError(f"Metal could not allocate {nbytes} bytes")
 
-            return Buffer(Object(ptr, owned=True), nbytes)
+            return Buffer(Object(ptr, owned=True), shape, dtype)
+
+    def new_buffer_from(self, array: npt.NDArray[Any]) -> "Buffer":
+        """Allocate a buffer holding a copy of ``array``, with its shape and dtype.
+
+        Raises:
+            TypeError: If ``array`` isn't a NumPy array, or holds Python
+                objects. A list would become ``float64`` or ``int64``, which
+                rarely match the kernel's types.
+            ValueError: If ``array`` is empty, or larger than
+                `max_buffer_length`.
+            AllocationError: If Metal can't allocate it.
+        """
+        if not isinstance(array, np.ndarray):
+            raise TypeError(f"expected a NumPy array, got {type(array).__name__}")
+        # Metal copies one block of bytes, in C order.
+        if not array.flags.c_contiguous:
+            array = array.copy(order="C")
+        nbytes = self._check_size(array.shape, array.dtype)
+
+        with AutoreleasePool():
+            ptr = send(
+                self._obj.ptr,
+                "newBufferWithBytes:length:options:",
+                array.ctypes.data,
+                nbytes,
+                _MTL_RESOURCE_STORAGE_MODE_SHARED,
+                restype=c_void_p,
+                argtypes=(c_void_p, c_ulong, c_ulong),
+            )
+            if ptr is None:
+                raise AllocationError(f"Metal could not allocate {nbytes} bytes")
+
+            return Buffer(Object(ptr, owned=True), array.shape, array.dtype)
+
+    def _check_size(self, shape: tuple[int, ...], dtype: np.dtype[Any]) -> int:
+        """Return the bytes a buffer of ``shape`` and ``dtype`` needs."""
+        if dtype.hasobject:
+            raise TypeError(f"the GPU can't read Python objects, got dtype {dtype}")
+        nbytes = math.prod(shape) * dtype.itemsize
+        limit = self.max_buffer_length
+        if not 0 < nbytes <= limit:
+            raise ValueError(f"a buffer holds 1 to {limit} bytes, got {nbytes}")
+        return nbytes
 
     def compile(self, source: str) -> "Library":
         """Compile Metal Shading Language ``source`` into a library.
@@ -151,20 +225,44 @@ class Device:
 
         return Library(self, Object(ptr, owned=True))
 
-    def run(self, kernel: "Kernel", buffers: Sequence["Buffer"], threads: int) -> None:
-        """Run ``kernel`` on ``threads`` GPU threads and wait until it finishes.
+    def run(
+        self,
+        kernel: "Kernel",
+        args: Sequence["Buffer | np.generic"],
+        threads: int | tuple[int, ...],
+    ) -> None:
+        """Run ``kernel`` on a grid of GPU threads and wait until it finishes.
 
-        ``buffers[i]`` fills the kernel's ``[[buffer(i)]]`` slot, and each
-        thread gets its index in ``[[thread_position_in_grid]]``.
+        ``args[i]`` fills the kernel's ``[[buffer(i)]]`` slot: a `Buffer`, or
+        a NumPy scalar such as ``np.float32(2.5)``, which Metal copies when
+        the work is encoded.
+
+        ``threads`` is the grid: ``n``, ``(width, height)``, or ``(width,
+        height, depth)``. Each thread gets its position in
+        ``[[thread_position_in_grid]]``, ``x`` first. An array of shape
+        ``(rows, cols)`` takes ``threads=(cols, rows)``.
 
         Raises:
-            ValueError: If ``threads`` is less than 1.
+            TypeError: If an argument is neither. A Python ``float`` or
+                ``int`` has no size the kernel can rely on.
+            ValueError: If ``threads`` has more than 3 sizes, or one below 1.
             MetalError: If Metal can't encode the work, or the GPU fails to
                 run it.
         """
-        if threads < 1:
-            raise ValueError(f"threads must be at least 1, got {threads}")
-        group = min(kernel.max_total_threads_per_threadgroup, threads)
+        grid = (threads,) if isinstance(threads, int) else tuple(threads)
+        if not 1 <= len(grid) <= 3 or min(grid) < 1:
+            raise ValueError(f"threads takes 1 to 3 sizes of at least 1, got {threads}")
+
+        # Metal aborts the process if an encoder is freed before endEncoding.
+        for arg in args:
+            if not isinstance(arg, Buffer | np.generic):
+                raise TypeError(
+                    f"expected a Buffer or a NumPy scalar such as np.float32(2.5), "
+                    f"got {type(arg).__name__}"
+                )
+
+        width, height, depth = grid + (1,) * (3 - len(grid))
+        group = _threadgroup(kernel, len(grid))
 
         with AutoreleasePool():
             commands = send(self._queue.ptr, "commandBuffer", restype=c_void_p)
@@ -181,21 +279,32 @@ class Device:
                 restype=None,
                 argtypes=(c_void_p,),
             )
-            for idx, buffer in enumerate(buffers):
-                send(
-                    encoder,
-                    "setBuffer:offset:atIndex:",
-                    buffer._obj.ptr,
-                    0,
-                    idx,
-                    restype=None,
-                    argtypes=(c_void_p, c_ulong, c_ulong),
-                )
+            for idx, arg in enumerate(args):
+                if isinstance(arg, Buffer):
+                    send(
+                        encoder,
+                        "setBuffer:offset:atIndex:",
+                        arg._obj.ptr,
+                        0,
+                        idx,
+                        restype=None,
+                        argtypes=(c_void_p, c_ulong, c_ulong),
+                    )
+                else:
+                    send(
+                        encoder,
+                        "setBytes:length:atIndex:",
+                        arg.tobytes(),
+                        arg.nbytes,
+                        idx,
+                        restype=None,
+                        argtypes=(c_char_p, c_ulong, c_ulong),
+                    )
             send(
                 encoder,
                 "dispatchThreads:threadsPerThreadgroup:",
-                _MTLSize(threads, 1, 1),
-                _MTLSize(group, 1, 1),
+                _MTLSize(width, height, depth),
+                group,
                 restype=None,
                 argtypes=(_MTLSize, _MTLSize),
             )
@@ -211,22 +320,28 @@ class Device:
 
 
 class Buffer:
-    """GPU memory the CPU reads and writes through NumPy, without copying.
+    """GPU memory shaped like a NumPy array, shared by the CPU and GPU.
 
     Attributes:
+        shape: The array's shape.
+        dtype: The array's element type.
         nbytes: The buffer's size in bytes.
     """
 
-    def __init__(self, obj: Object, nbytes: int) -> None:
+    def __init__(
+        self, obj: Object, shape: tuple[int, ...], dtype: np.dtype[Any]
+    ) -> None:
         """Wrap the ``MTLBuffer`` in ``obj``. Use `Device.new_buffer`."""
         self._obj = obj
         contents = send(obj.ptr, "contents", restype=c_void_p)
         assert contents is not None, "contents is nonnull in MTLBuffer.h"
         self._contents = contents
-        self.nbytes = nbytes
+        self.shape = shape
+        self.dtype = dtype
+        self.nbytes = math.prod(shape) * dtype.itemsize
 
     def __repr__(self) -> str:
-        return f"<Buffer {self.nbytes} bytes>"
+        return f"<Buffer {self.shape} {self.dtype}>"
 
     def __buffer__(self, flags: int, /) -> memoryview:
         """Expose the buffer's memory to the buffer protocol.
@@ -241,19 +356,14 @@ class Buffer:
         """
         return memoryview((c_ubyte * self.nbytes).from_address(self._contents))
 
-    def numpy(
-        self, dtype: npt.DTypeLike, shape: int | tuple[int, ...] = -1
-    ) -> npt.NDArray[Any]:
-        """Return a NumPy array over the buffer's memory.
+    def numpy(self) -> npt.NDArray[Any]:
+        """Return a NumPy array over the buffer's memory, without copying.
 
         Writes to the array are writes to the buffer. The array keeps the
-        buffer alive.
-
-        Args:
-            dtype: How to read the bytes, e.g. ``np.float32``.
-            shape: The array's shape. Defaults to one dimension.
+        buffer alive. To read the bytes as another type, use the array's
+        ``view``.
         """
-        return np.frombuffer(self, dtype=dtype).reshape(shape)
+        return np.frombuffer(self, dtype=self.dtype).reshape(self.shape)
 
 
 class Library:

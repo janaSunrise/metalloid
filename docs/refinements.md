@@ -6,8 +6,9 @@
       `CompileError`, `KernelNotFoundError` (also a `LookupError`), and
       `AllocationError` (also a `MemoryError`) derive from it. Bad arguments
       stay `ValueError` and `TypeError`.
-- [ ] `new_buffer(0)` raises `AllocationError`. It's a bad argument, not a lack of
-      memory: check `nbytes` first and raise `ValueError` with the valid range.
+- [x] `new_buffer(0)` raises `AllocationError`. It's a bad argument, not a lack of
+      memory. Both buffer constructors raise `ValueError` with the valid range
+      (note 09).
 - [ ] Objective-C exceptions abort the process and can't be caught (an
       unrecognized selector, mutating an immutable string). Consider a debug
       mode that checks `respondsToSelector:` before sending.
@@ -16,9 +17,9 @@
 - [ ] Messaging nil silently returns 0 or `None`, which hides bugs. The type
       checker now rejects a receiver that may be `None`, and `Object(None)`,
       but nothing checks at runtime.
-- [ ] `Buffer.numpy()` passes on NumPy's errors when the size isn't a multiple
-      of the dtype or the shape doesn't fit. Say it plainly, e.g. "16 bytes
-      can't hold shape (3, 2) of float32".
+- [x] `Buffer.numpy()` passes on NumPy's errors when the size isn't a multiple
+      of the dtype or the shape doesn't fit. A buffer records its dtype and
+      shape, so `numpy()` takes no arguments and can't get them wrong.
 
 ## API
 
@@ -27,11 +28,11 @@
       exported. `Buffer`, `Library`, and `Kernel` aren't yet, so they can't be
       used in annotations without importing `metalloid._metal`.
 - [x] `__repr__` for `Device`, `Buffer`, `Library`, and `Kernel`, e.g.
-      `<Device 'Apple M1 Pro'>`, `<Buffer 16 bytes>`, `<Library ['add']>`,
+      `<Device 'Apple M1 Pro'>`, `<Buffer (4,) float32>`, `<Library ['add']>`,
       `<Kernel 'add'>`.
 - [ ] `Device()` opens the GPU on every call. Consider a cached default device.
-- [ ] Buffers can only be created empty. Add creating one from a NumPy array,
-      or with a dtype and shape directly.
+- [x] Buffers can only be created empty. `new_buffer(shape, dtype)` and
+      `new_buffer_from(array)` (note 09).
 - [ ] `Library` reaches into `Device._obj`. Classes shouldn't use each other's
       private attributes.
 - [ ] `Buffer`, `Library`, and `Kernel` have public constructors but should

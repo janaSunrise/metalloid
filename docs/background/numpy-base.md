@@ -24,7 +24,7 @@ lender can't be freed.
 own argument:
 
 ```py
-buf = Device().new_buffer(16)
+buf = Device().new_buffer(4, np.float32)
 sys.getrefcount(buf)                  # 2: our variable
 
 arr = np.frombuffer(buf, dtype=np.float32)

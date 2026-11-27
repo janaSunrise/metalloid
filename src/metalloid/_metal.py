@@ -17,6 +17,12 @@ import numpy as np
 import numpy.typing as npt
 
 from metalloid._objc import AutoreleasePool, Object, from_str, send, to_str
+from metalloid.errors import (
+    AllocationError,
+    CompileError,
+    KernelNotFoundError,
+    MetalError,
+)
 
 _metal = ctypes.CDLL("/System/Library/Frameworks/Metal.framework/Metal")
 
@@ -33,20 +39,11 @@ _MTL_RESOURCE_STORAGE_MODE_SHARED = 0
 _MTL_COMMAND_BUFFER_STATUS_ERROR = 5
 
 
-class MetalError(Exception):
-    """Base class of metalloid's errors."""
-
-
-class CompileError(MetalError):
-    """Metal couldn't compile a kernel. The message is the compiler's."""
-
-
-class KernelNotFoundError(MetalError, LookupError):
-    """A library has no kernel with the requested name."""
-
-
-class AllocationError(MetalError, MemoryError):
-    """Metal couldn't allocate a buffer."""
+class _MTLSize(Structure):
+    _fields_ = (("width", c_ulong), ("height", c_ulong), ("depth", c_ulong))
+    width: int
+    height: int
+    depth: int
 
 
 def _describe(error: c_void_p) -> str:
@@ -54,13 +51,6 @@ def _describe(error: c_void_p) -> str:
     if error.value is None:
         return "Metal reported no error description"
     return to_str(send(error.value, "localizedDescription", restype=c_void_p))
-
-
-class _MTLSize(Structure):
-    _fields_ = (("width", c_ulong), ("height", c_ulong), ("depth", c_ulong))
-    width: int
-    height: int
-    depth: int
 
 
 def _threadgroup(kernel: "Kernel", dimensions: int) -> _MTLSize:
